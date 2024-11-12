@@ -196,6 +196,7 @@ program
       console.log(chalk.green('Node initialized successfully!'));
       console.log(chalk.cyan('Node ID:'), node.nodeId);
       console.log(chalk.cyan('Port:'), node.port);
+      console.log(chalk.yellow('Private Key:'), config.privateKey);
 
       for (const peer of config.peers) {
         try {
