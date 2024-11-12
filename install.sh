@@ -14,7 +14,7 @@ REPO_URL="https://raw.githubusercontent.com/infermesh/decentralized-p2p/main"
 INSTALL_DIR="$HOME/.infermesh"
 TEMP_DIR="/tmp/infermesh-install"
 
-echo :: "${BLUE}Installing InferMesh...${NC}"
+echo -e "${BLUE}Installing InferMesh...${NC}"
 
 # Create temporary directory for downloads
 rm -rf $TEMP_DIR
@@ -22,14 +22,14 @@ mkdir -p $TEMP_DIR
 mkdir -p $TEMP_DIR/src
 
 # Download source files
-echo :: "${BLUE}Downloading source files...${NC}"
+echo -e "${BLUE}Downloading source files...${NC}"
 curl -sSL "$REPO_URL/cli.js" -o "$TEMP_DIR/cli.js"
 curl -sSL "$REPO_URL/src/state-p2p-node.js" -o "$TEMP_DIR/src/state-p2p-node.js"
 
 # Check if installation exists
 if [ -d "$INSTALL_DIR" ]; then
-    echo :: "${YELLOW}Existing installation found at $INSTALL_DIR${NC}"
-    echo :: "${YELLOW}Removing old installation...${NC}"
+    echo -e "${YELLOW}Existing installation found at $INSTALL_DIR${NC}"
+    echo -e "${YELLOW}Removing old installation...${NC}"
     rm -rf "$INSTALL_DIR"
 fi
 
@@ -39,7 +39,7 @@ mkdir -p $INSTALL_DIR/nodes
 mkdir -p $INSTALL_DIR/states
 
 # Create package.json with ES module support
-echo :: "${BLUE}Creating package.json...${NC}"
+echo -e "${BLUE}Creating package.json...${NC}"
 cat > "$INSTALL_DIR/package.json" << EOL
 {
   "name": "infermesh",
@@ -58,16 +58,16 @@ EOL
 
 # Install dependencies
 cd $INSTALL_DIR
-echo :: "${BLUE}Installing dependencies...${NC}"
+echo -e "${BLUE}Installing dependencies...${NC}"
 npm install > /dev/null 2>&1
 
 # Copy source files from temporary directory
-echo :: "${BLUE}Setting up files...${NC}"
+echo -e "${BLUE}Setting up files...${NC}"
 cp "$TEMP_DIR/cli.js" "$INSTALL_DIR/bin/"
 cp -r "$TEMP_DIR/src" "$INSTALL_DIR/bin/"
 
 # Create mesh executable
-echo :: "${BLUE}Creating mesh executable...${NC}"
+echo -e "${BLUE}Creating mesh executable...${NC}"
 cat > "$INSTALL_DIR/bin/mesh" << EOL
 #!/bin/bash
 node "$INSTALL_DIR/bin/cli.js" "\$@"
@@ -90,12 +90,12 @@ add_to_shell_config() {
         echo "" >> "$config_file"
         echo "# InferMesh PATH" >> "$config_file"
         echo "$path_line" >> "$config_file"
-        echo :: "${GREEN}Updated PATH in ${config_file}${NC}"
+        echo -e "${GREEN}Updated PATH in ${config_file}${NC}"
     fi
 }
 
 # Add to various shell configs
-echo :: "${BLUE}Updating shell configurations...${NC}"
+echo -e "${BLUE}Updating shell configurations...${NC}"
 add_to_shell_config "$HOME/.bashrc"
 add_to_shell_config "$HOME/.zshrc"
 add_to_shell_config "$HOME/.profile"
@@ -106,11 +106,11 @@ export PATH="$PATH:$INSTALL_DIR/bin"
 # Cleanup
 rm -rf $TEMP_DIR
 
-echo :: "${GREEN}Installation complete!${NC}"
-echo :: "\n${BLUE}To start using InferMesh, either:${NC}"
-echo :: "1. Restart your terminal"
-echo :: "2. Or run: ${BLUE}source ~/.bashrc${NC}"
-echo :: "\nThen try: ${BLUE}mesh help${NC}"
+echo -e "${GREEN}Installation complete!${NC}"
+echo -e "\n${BLUE}To start using InferMesh, either:${NC}"
+echo -e "1. Restart your terminal"
+echo -e "2. Or run: ${BLUE}source ~/.bashrc${NC}"
+echo -e "\nThen try: ${BLUE}mesh help${NC}"
 
 # Try to source the appropriate RC file
 if [ -n "$ZSH_VERSION" ]; then
@@ -119,5 +119,5 @@ elif [ -n "$BASH_VERSION" ]; then
     source "$HOME/.bashrc" >/dev/null 2>&1
 fi
 
-echo :: "\n${BLUE}Installation directory: ${NC}$INSTALL_DIR"
-echo :: "${BLUE}Verify installation with: ${NC}mesh help"
+echo -e "\n${BLUE}Installation directory: ${NC}$INSTALL_DIR"
+echo -e "${BLUE}Verify installation with: ${NC}mesh help"
