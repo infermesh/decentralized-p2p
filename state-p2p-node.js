@@ -1,11 +1,11 @@
 // state-p2p-node.js
 import { WebSocketServer, WebSocket } from 'ws';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { EventEmitter } from 'events';
+import https from 'https';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
-import { networkInterfaces } from 'os';
+import { homedir, networkInterfaces } from 'os';
 
 class DecentralizedNode extends EventEmitter {
   constructor(privateKey, options = {}) {
