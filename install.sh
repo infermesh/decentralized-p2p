@@ -12,7 +12,7 @@ REPO_URL="https://raw.githubusercontent.com/infermesh/decentralized-p2p/main"
 
 # Get the installation directory
 INSTALL_DIR="$HOME/.infermesh"
-TEMP_DIR="/tmp/infermesh-install"
+TEMP_DIR="/tmp/.com.infermesh.install"
 
 # Check for required commands
 if ! command -v curl > /dev/null; then
