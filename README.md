@@ -15,115 +15,6 @@ InferMesh is a revolutionary approach to peer-to-peer networking where nodes wea
 - 🌍 Public/Private network support
 - 🔍 Built-in peer discovery
 
-## Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/infermesh/decentralized-p2p.git
-cd decentralized-p2p
-
-# Install dependencies
-npm install
-
-# Start a new node
-node cli.js init
-
-# Dont' forget to save the node ID and port shown!
-```
-
-## Interactive Commands
-
-Once connected, you'll get an interactive prompt with these commands:
-
-```bash
-infermesh> state
-# Shows current state and data
-
-infermesh> peers
-# Lists connected peers
-
-infermesh> discover
-# Shows all available peers in the network
-
-infermesh> update <key> <value>
-# Updates state. Value can be text, number, or JSON
-# Example: update name "John"
-# Example: update config {"theme":"dark","mode":1}
-
-infermesh> delete <key>
-# Deletes a state entry
-
-infermesh> connect <host> <port>
-# Connects to a peer node
-
-infermesh> info
-# Shows node information including public IP
-
-infermesh> exit
-# Exits the program
-```
-
-## AWS / Public Network Usage
-
-1. Start node on AWS:
-```bash
-node cli.js init
-# Note the public IP and port shown
-```
-
-2. Connect from another machine:
-```bash
-node cli.js init
-infermesh> connect <aws-public-ip> <port>
-```
-
-3. Use discovery:
-```bash
-infermesh> discover
-# Shows all available peers including AWS nodes
-```
-
-Remember to:
-- Configure AWS security group to allow inbound traffic on port range 3000-4000
-- Use the public IP address when connecting from outside AWS
-
-## State Management Examples
-
-1. Basic text state:
-```bash
-infermesh> update username "john_doe"
-infermesh> update email "john@example.com"
-```
-
-2. JSON configuration:
-```bash
-infermesh> update config {"theme":"dark","notifications":true}
-infermesh> update preferences {"language":"en","timezone":"UTC"}
-```
-
-3. Array data:
-```bash
-infermesh> update tags ["important","urgent","todo"]
-```
-
-4. Check state:
-```bash
-infermesh> state
-{
-  "data": {
-    "username": "john_doe",
-    "email": "john@example.com",
-    "config": {
-      "theme": "dark",
-      "notifications": true
-    },
-    "tags": ["important","urgent","todo"]
-  },
-  "version": 4,
-  "timestamp": 1699825678554
-}
-```
-
 ## Network Architecture
 
 - Every node is equal (no central server)
@@ -132,7 +23,80 @@ infermesh> state
 - Persistent peer connections
 - Automatic state synchronization
 
-## Technical Details
+## Quick Install
+
+```bash
+curl -sSL https://raw.githubusercontent.com/infermesh/decentralized-p2p/main/install.sh | bash
+```
+
+## Usage
+
+```bash
+# Initialize a new node
+mesh init
+
+# List known nodes
+mesh ls
+
+# Show node status
+mesh status
+
+# Interactive shell commands:
+mesh> state                     # Show current state
+mesh> ls                        # List connected peers
+mesh> set <key> <value>         # Set state value (supports JSON)
+mesh> get <key>                 # Get state value
+mesh> del <key>                 # Delete state value
+mesh> connect <nodeId>          # Connect to a node
+mesh> status                    # Show node status
+mesh> help                      # Show available commands
+mesh> exit                      # Exit the shell
+```
+
+## Examples
+
+1. Start first node:
+```bash
+mesh init
+# Note the node ID and port shown
+```
+
+2. Start second node and connect:
+```bash
+mesh init
+mesh> connect <nodeId>
+```
+
+3. Set and get state:
+```bash
+# Simple values
+mesh> set name "John"
+mesh> get name
+
+# JSON values
+mesh> set config {"theme":"dark","notifications":true}
+mesh> set colors ["red","green","blue"]
+```
+
+## AWS / Public Network Usage
+
+1. Start node on AWS:
+```bash
+mesh init
+# Note the public IP and node ID
+```
+
+2. Connect from another machine:
+```bash
+mesh init
+mesh> connect <nodeId>
+```
+
+Remember to:
+- Configure AWS security group for ports 3000-4000
+- Use public IP when connecting from outside
+
+## Technical Information
 
 ### Storage
 - Configuration stored in `~/.infermesh/config.json`
@@ -145,9 +109,10 @@ infermesh> state
 - Port range: 3000-4000
 - Automatic peer discovery
 
-### State
+### State Persistence
+- Recovered on restart
 - Version-controlled state updates
-- Real-time state synchronization
+- Real-time state synchronization between nodes
 - JSON data support
 - Conflict resolution
 
@@ -161,26 +126,18 @@ infermesh> state
 ## Project Structure
 
 ```
-infermesh/
-├── src/
-│   └── state-p2p-node.js   # Core node implementation
-├── cli.js                  # CLI interface
-└── package.json            # Project configuration
-└── README.md               # This file 
+~/.infermesh/
+├── nodes/        # Node registry
+├── states/       # Persistent states
+└── bin/          # Executables
 ```
 
-## Development
+## Security Notes
 
-```bash
-# Clone the repository
-git clone https://github.com/infermesh/decentralized-p2p.git
-
-# Install dependencies
-npm install
-
-# Start a node
-node cli.js init
-```
+- Keep your private key secure
+- States are synced across all connected nodes
+- Use AWS security groups in production
+- Consider network security in public deployments
 
 ## Contributing
 

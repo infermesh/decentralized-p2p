@@ -7,9 +7,19 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import DecentralizedNode from './src/state-p2p-node.js';
+import figlet from 'figlet';
 
 const CONFIG_DIR = join(homedir(), '.infermesh');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
+
+// Add this function for displaying the logo
+function showLogo() {
+  console.log(chalk.cyan(figlet.textSync('InferMesh', {
+    font: 'Standard',
+    horizontalLayout: 'default',
+    verticalLayout: 'default'
+  })));
+}
 
 async function loadConfig() {
   try {
@@ -25,168 +35,233 @@ async function saveConfig(config) {
   await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
-function tryParseValue(valueStr) {
-  try {
-    return JSON.parse(valueStr);
-  } catch {
-    return valueStr;
-  }
+const program = new Command();
+
+program
+  .name('mesh')
+  .description('InferMesh - Decentralized State Management')
+  .version('1.0.0');
+
+program
+  .command('init')
+  .description('Initialize a new node')
+  .action(async () => {
+    try {
+      let config = await loadConfig();
+      if (!config.privateKey) {
+        config.privateKey = randomBytes(32).toString('hex');
+        await saveConfig(config);
+      }
+      const node = new DecentralizedNode(config.privateKey);
+      await node.initialize();
+      startShell(node);
+    } catch (error) {
+      console.error(chalk.red('Failed to initialize node:'), error);
+      process.exit(1);
+    }
+  });
+
+// Add help command
+program
+  .command('help')
+  .description('Show help information')
+  .action(() => {
+    showLogo();
+    console.log(chalk.cyan('\nUsage:'));
+    console.log('  mesh [command] [options]');
+
+    console.log(chalk.cyan('\nGlobal Commands:'));
+    console.log(chalk.yellow('  init') + '              Initialize a new node');
+    console.log(chalk.yellow('  ls') + '                List all known nodes');
+    console.log(chalk.yellow('  status') + '            Show node status and connections');
+    console.log(chalk.yellow('  help') + '              Show this help message');
+
+    console.log(chalk.cyan('\nShell Commands (available after init):'));
+    console.log(chalk.yellow('  state') + '             Show current state');
+    console.log(chalk.yellow('  ls') + '                List connected peers');
+    console.log(chalk.yellow('  set <key> <value>') + ' Set state value (supports JSON)');
+    console.log(chalk.yellow('  get <key>') + '         Get state value');
+    console.log(chalk.yellow('  del <key>') + '         Delete state value');
+    console.log(chalk.yellow('  connect <nodeId>') + '  Connect to a node');
+    console.log(chalk.yellow('  status') + '            Show node status');
+    console.log(chalk.yellow('  exit') + '              Exit the shell');
+
+    console.log(chalk.cyan('\nExamples:'));
+    console.log('  # Start a new node');
+    console.log('  $ mesh init');
+    console.log('\n  # Check node status');
+    console.log('  $ mesh status');
+    console.log('\n  # In shell, set a value');
+    console.log('  mesh> set name "John"');
+    console.log('\n  # In shell, set JSON value');
+    console.log('  mesh> set config {"theme":"dark","enabled":true}');
+    console.log('\n  # In shell, connect to another node');
+    console.log('  mesh> connect abc123...');
+
+    console.log(chalk.cyan('\nConfiguration:'));
+    console.log(`  Config directory: ${CONFIG_DIR}`);
+    console.log('  State persistence: Enabled');
+    console.log('  Auto-discovery: Enabled');
+    console.log('  Port range: 3000-4000');
+
+    process.exit(0);
+  });
+
+program
+  .command('ls')
+  .description('List all known nodes')
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      if (!config.privateKey) {
+        console.error(chalk.red('No node initialized. Run "mesh init" first.'));
+        process.exit(1);
+      }
+      const node = new DecentralizedNode(config.privateKey);
+      const nodes = await node.discoverNodes();
+
+      if (nodes.length > 0) {
+        console.log(chalk.cyan('\nKnown Nodes:'));
+        nodes.forEach(nodeInfo => {
+          console.log(chalk.yellow(`\nNode ${nodeInfo.nodeId.slice(0, 8)}...`));
+          console.log(`Host: ${nodeInfo.host}`);
+          console.log(`Port: ${nodeInfo.port}`);
+          console.log(`Last Seen: ${new Date(nodeInfo.lastSeen).toLocaleString()}`);
+        });
+      } else {
+        console.log(chalk.yellow('No nodes discovered.'));
+      }
+      process.exit(0);
+    } catch (error) {
+      console.error(chalk.red('Error:'), error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('status')
+  .description('Show node status and connections')
+  .action(async () => {
+    try {
+      const config = await loadConfig();
+      if (!config.privateKey) {
+        console.error(chalk.red('No node initialized. Run "mesh init" first.'));
+        process.exit(1);
+      }
+      const node = new DecentralizedNode(config.privateKey);
+      console.log(chalk.cyan('\nNode Information:'));
+      console.log(`ID: ${node.nodeId}`);
+      if (node.publicIp) {
+        console.log(`Public IP: ${node.publicIp}`);
+      }
+      console.log(`Connected Peers: ${node.peers.size}`);
+      console.log(`State Version: ${node.state.version}`);
+      process.exit(0);
+    } catch (error) {
+      console.error(chalk.red('Error:'), error);
+      process.exit(1);
+    }
+  });
+
+function showShellHelp() {
+  console.log(chalk.cyan('\nAvailable Commands:'));
+  console.log(chalk.yellow('  state') + '             Show current state');
+  console.log(chalk.yellow('  ls') + '                List connected peers');
+  console.log(chalk.yellow('  set <key> <value>') + ' Set state value (supports JSON)');
+  console.log(chalk.yellow('  get <key>') + '         Get state value');
+  console.log(chalk.yellow('  del <key>') + '         Delete state value');
+  console.log(chalk.yellow('  connect <nodeId>') + '  Connect to a node');
+  console.log(chalk.yellow('  status') + '            Show node status');
+  console.log(chalk.yellow('  help') + '              Show this help message');
+  console.log(chalk.yellow('  exit') + '              Exit the shell');
+  console.log();
 }
 
-async function createInteractiveCLI(node) {
+function startShell(node) {
+  showLogo();
+  showShellHelp();
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: 'infermesh> '
+    prompt: chalk.blue('mesh> ')
   });
-
-  console.log(chalk.cyan('\nAvailable commands:'));
-  console.log(chalk.yellow('  state') + ' - Show current state');
-  console.log(chalk.yellow('  peers') + ' - List connected peers');
-  console.log(chalk.yellow('  discover') + ' - Discover available peers');
-  console.log(chalk.yellow('  update <key> <value>') + ' - Update state (value can be text, number, or JSON)');
-  console.log(chalk.yellow('  delete <key>') + ' - Delete state entry');
-  console.log(chalk.yellow('  connect <host> <port>') + ' - Connect to a peer');
-  console.log(chalk.yellow('  info') + ' - Show node info');
-  console.log(chalk.yellow('  exit') + ' - Exit\n');
 
   rl.prompt();
 
   rl.on('line', async (line) => {
     const args = line.trim().split(' ');
-    const command = args[0].toLowerCase();
+    const cmd = args[0].toLowerCase();
 
     try {
-      switch (command) {
+      const nodes = await node.discoverNodes();
+
+      switch (cmd) {
         case 'state':
-          const state = node.getState();
-          console.log(chalk.cyan('Current State:'));
-          console.log(JSON.stringify(state, null, 2));
+          console.log(JSON.stringify(node.getState(), null, 2));
           break;
 
-        case 'peers':
-          console.log(chalk.cyan('Connected Peers:'));
-          node.peers.forEach((peer, nodeId) => {
-            console.log(`${nodeId} (port: ${peer.port})`);
+        case 'ls':
+          nodes.forEach(n => {
+            console.log(chalk.yellow(`\nNode ${n.nodeId.slice(0, 8)}...`));
+            console.log(`Host: ${n.host}`);
+            console.log(`Port: ${n.port}`);
           });
           break;
 
-        case 'discover':
-          console.log(chalk.cyan('\nDiscovering nodes...'));
-          const nodes = await node.discoverNodes();
-
-          if (nodes.length > 0) {
-            // Sort nodes: self first, then connected, then others
-            nodes.sort((a, b) => {
-              if (a.isSelf) return -1;
-              if (b.isSelf) return 1;
-              if (a.isConnected && !b.isConnected) return -1;
-              if (!a.isConnected && b.isConnected) return 1;
-              return b.lastSeen - a.lastSeen;
-            });
-
-            nodes.forEach(nodeInfo => {
-              if (nodeInfo.isSelf) {
-                console.log(chalk.blue('\nThis Node'));
-              } else if (nodeInfo.isConnected) {
-                console.log(chalk.green('\nConnected Node'));
-              } else {
-                console.log(chalk.yellow('\nDiscovered Node'));
-              }
-
-              console.log(`Node ID: ${nodeInfo.nodeId}`);
-              console.log(`Host: ${nodeInfo.host}`);
-              console.log(`Port: ${nodeInfo.port}`);
-              console.log(`Last Seen: ${new Date(nodeInfo.lastSeen).toLocaleString()}`);
-              console.log(`State Version: ${nodeInfo.state.version}`);
-
-              if (!nodeInfo.isSelf && !nodeInfo.isConnected) {
-                console.log(chalk.gray(`Connect with: connect ${nodeInfo.nodeId}`));
-              }
-            });
-          } else {
-            console.log(chalk.yellow('No nodes discovered.'));
-          }
-          break;
-
-        case 'update':
+        case 'set':
           if (args.length < 3) {
-            console.log(chalk.red('Usage: update <key> <value>'));
+            console.log(chalk.red('Usage: set <key> <value>'));
             break;
           }
-          const key = args[1];
-          const value = tryParseValue(args.slice(2).join(' '));
-          await node.updateState(key, value);
-          console.log(chalk.green(`Updated state: ${key} = ${JSON.stringify(value)}`));
+          const value = args.slice(2).join(' ');
+          try {
+            await node.updateState(args[1], JSON.parse(value));
+          } catch {
+            await node.updateState(args[1], value);
+          }
+          console.log(chalk.green('State updated'));
           break;
 
-        case 'delete':
+        case 'get':
           if (args.length < 2) {
-            console.log(chalk.red('Usage: delete <key>'));
+            console.log(chalk.red('Usage: get <key>'));
+            break;
+          }
+          const state = node.getState();
+          console.log(state.data[args[1]] || 'null');
+          break;
+
+        case 'del':
+          if (args.length < 2) {
+            console.log(chalk.red('Usage: del <key>'));
             break;
           }
           await node.deleteState(args[1]);
-          console.log(chalk.green(`Deleted state entry: ${args[1]}`));
+          console.log(chalk.green('State deleted'));
           break;
 
         case 'connect':
           if (args.length < 2) {
-            console.log(chalk.red('Usage:'));
-            console.log(chalk.yellow('  connect <nodeId>') + ' - Connect using node ID (preferred)');
-            console.log(chalk.yellow('  connect <host> <port>') + ' - Connect using host and port');
+            console.log(chalk.red('Usage: connect <nodeId>'));
             break;
           }
 
-          try {
-            const config = await loadConfig();
-
-            if (args.length === 2) {
-              // Connect by node ID
-              const targetNodeId = args[1];
-
-              // Check if we have this node's info in our config
-              const knownPeer = config.peers.find(p => p.nodeId === targetNodeId);
-
-              if (knownPeer) {
-                await node.connect(knownPeer.host, knownPeer.port);
-                console.log(chalk.green(`Connected to node ${targetNodeId}`));
-              } else {
-                console.log(chalk.red('Node ID not found in known peers.'));
-                console.log('Use discover command to find available nodes.');
-              }
-            } else {
-              // Traditional host:port connection
-              const host = args[1];
-              const port = parseInt(args[2]);
-              const connectedNode = await node.connect(host, port);
-
-              // Save the node info for future connections
-              if (!config.peers.some(p => p.host === host && p.port === port)) {
-                config.peers.push({
-                  nodeId: connectedNode.nodeId,
-                  host,
-                  port,
-                  lastSeen: Date.now()
-                });
-                await saveConfig(config);
-              }
-              console.log(chalk.green(`Connected to ${host}:${port}`));
-            }
-          } catch (error) {
-            console.error(chalk.red('Connection failed:'), error.message);
+          const targetNode = nodes.find(n => n.nodeId.startsWith(args[1]));
+          if (targetNode) {
+            await node.connect(targetNode.host, targetNode.port);
+            console.log(chalk.green('Connected successfully'));
+          } else {
+            console.log(chalk.red('Node not found'));
           }
           break;
 
-        case 'info':
-          console.log(chalk.cyan('Node Information:'));
-          console.log(`Node ID: ${node.nodeId}`);
-          console.log(`Port: ${node.port}`);
-          if (node.publicIp) {
-            console.log(`Public IP: ${node.publicIp}`);
-          }
+        case 'status':
+          console.log(chalk.cyan('\nNode Status:'));
+          console.log(`ID: ${node.nodeId}`);
+          if (node.publicIp) console.log(`Public IP: ${node.publicIp}`);
           console.log(`Connected Peers: ${node.peers.size}`);
           console.log(`State Version: ${node.state.version}`);
-          console.log(`Last Updated: ${new Date(node.state.timestamp).toLocaleString()}`);
           break;
 
         case 'exit':
@@ -194,21 +269,21 @@ async function createInteractiveCLI(node) {
           process.exit(0);
           break;
 
+        case 'help':
+          showShellHelp();
+          break;
+
         case '':
           break;
 
         default:
-          console.log(chalk.red('Unknown command. Type any key to see available commands'));
-          break;
+          console.log(chalk.red('Unknown command. Type "help" to see available commands'));
       }
     } catch (error) {
       console.error(chalk.red('Error:'), error.message);
     }
 
     rl.prompt();
-  }).on('close', () => {
-    console.log(chalk.yellow('Goodbye!'));
-    process.exit(0);
   });
 
   node.on('stateUpdated', (state) => {
@@ -218,46 +293,4 @@ async function createInteractiveCLI(node) {
   });
 }
 
-const program = new Command();
-
-program
-  .version('1.0.0')
-  .description('InferMesh CLI');
-
-program
-  .command('init')
-  .description('Initialize a new P2P node')
-  .action(async () => {
-    try {
-      let config = await loadConfig();
-
-      if (!config.privateKey) {
-        config.privateKey = randomBytes(32).toString('hex');
-        await saveConfig(config);
-      }
-
-      const node = new DecentralizedNode(config.privateKey);
-      await node.initialize();
-
-      console.log(chalk.green('Node initialized successfully!'));
-      console.log(chalk.cyan('Node ID:'), node.nodeId);
-      console.log(chalk.cyan('Port:'), node.port);
-      console.log(chalk.yellow('Private Key:'), config.privateKey);
-
-      for (const peer of config.peers) {
-        try {
-          await node.connect(peer.host, peer.port);
-          console.log(chalk.green(`Connected to peer ${peer.host}:${peer.port}`));
-        } catch (error) {
-          console.log(chalk.yellow(`Failed to connect to ${peer.host}:${peer.port}`));
-        }
-      }
-
-      await createInteractiveCLI(node);
-    } catch (error) {
-      console.error(chalk.red('Failed to initialize node:'), error);
-      process.exit(1);
-    }
-  });
-
-program.parse(process.argv);
+program.parse();
