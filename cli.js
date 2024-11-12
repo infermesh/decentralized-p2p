@@ -239,7 +239,9 @@ program
 program
   .command('init')
   .description('Initialize a new node')
-  .action(async () => {
+  .option('--cloud', 'Initialize as a cloud node')
+  .option('-p, --port <number>', 'Specify port number')
+  .action(async (options) => {
     try {
       let config = await loadConfig();
 
@@ -248,7 +250,12 @@ program
         await saveConfig(config);
       }
 
-      const node = new DecentralizedNode(config.privateKey);
+      const nodeOptions = {
+        isCloudNode: options.cloud || false,
+        port: options.port ? parseInt(options.port) : null
+      };
+
+      const node = new DecentralizedNode(config.privateKey, nodeOptions);
       await node.initialize();
       await createInteractiveCLI(node);
     } catch (error) {

@@ -1,14 +1,15 @@
 // state-p2p-node.js
 import { WebSocketServer, WebSocket } from 'ws';
-import { createHash, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
 import { EventEmitter } from 'events';
 import https from 'https';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { networkInterfaces } from 'os';
 
 class DecentralizedNode extends EventEmitter {
-  constructor(privateKey) {
+  constructor(privateKey, options = {}) {
     super();
     this.privateKey = privateKey;
     this.nodeId = this.generateNodeId();
@@ -18,13 +19,15 @@ class DecentralizedNode extends EventEmitter {
       version: 0,
       timestamp: Date.now()
     };
-    this.port = 3000 + Math.floor(Math.random() * 1000);
+    // Allow custom port configuration
+    this.port = options.port || (3000 + Math.floor(Math.random() * 1000));
     this.nodePath = join(homedir(), '.infermesh', 'nodes');
     this.nodeFile = join(this.nodePath, `${this.nodeId}.json`);
     this.statePath = join(homedir(), '.infermesh', 'states');
     this.stateFile = join(this.statePath, `${this.nodeId}.json`);
     this.connectionAttempts = new Map();
-    this.reconnectTimeouts = new Map();
+    this.isCloudNode = options.isCloudNode || false; // Flag to indicate if running in cloud
+    this.knownNodes = new Set(); // Track known node addresses
   }
 
   generateNodeId() {
@@ -123,20 +126,24 @@ class DecentralizedNode extends EventEmitter {
       await fs.mkdir(this.nodePath, { recursive: true });
       const nodeInfo = {
         nodeId: this.nodeId,
-        host: this.publicIp || 'localhost',
+        host: this.publicIp || this.localIp || 'localhost',
         port: this.port,
         lastSeen: Date.now(),
         startTime: Date.now(),
+        isCloudNode: this.isCloudNode,
         state: {
           version: this.state.version,
           timestamp: this.state.timestamp
         }
       };
 
-      // Write to temporary file first
-      const tempFile = `${this.nodeFile}.tmp`;
-      await fs.writeFile(tempFile, JSON.stringify(nodeInfo, null, 2));
-      await fs.rename(tempFile, this.nodeFile);
+      await fs.writeFile(
+        this.nodeFile,
+        JSON.stringify(nodeInfo, null, 2)
+      );
+
+      console.log(`Node registered as ${this.isCloudNode ? 'cloud' : 'local'} node`);
+      console.log(`Node address: ${nodeInfo.host}:${nodeInfo.port}`);
     } catch (error) {
       console.error('Error registering node:', error);
     }
@@ -282,6 +289,14 @@ class DecentralizedNode extends EventEmitter {
       console.log('\nDiscovering network nodes...');
       const nodes = await this.discoverNodes();
 
+      // Log found nodes
+      if (nodes.length > 0) {
+        console.log('Found nodes:');
+        nodes.forEach(node => {
+          console.log(`- Node ${node.nodeId} at ${node.host}:${node.port} (${node.isCloudNode ? 'cloud' : 'local'})`);
+        });
+      }
+
       for (const nodeInfo of nodes) {
         if (nodeInfo.isSelf || nodeInfo.isConnected) continue;
 
@@ -292,7 +307,14 @@ class DecentralizedNode extends EventEmitter {
         this.connectionAttempts.set(nodeInfo.nodeId, now);
 
         try {
-          console.log(`Attempting to connect to node ${nodeInfo.nodeId}`);
+          if (!this.isCloudNode) {
+            // Local nodes should only connect to cloud nodes
+            if (!nodeInfo.isCloudNode) {
+              console.log(`Skipping local-to-local connection to ${nodeInfo.nodeId}`);
+              continue;
+            }
+          }
+
           await this.connectToNode(nodeInfo);
           console.log(`Successfully connected to node ${nodeInfo.nodeId}`);
         } catch (error) {
@@ -304,7 +326,7 @@ class DecentralizedNode extends EventEmitter {
       if (connectedNodes > 0) {
         console.log(`\nConnected to ${connectedNodes} active node${connectedNodes > 1 ? 's' : ''}`);
       } else {
-        console.log('\nNo active nodes found. This is the first node in the network.');
+        console.log('\nNo active nodes found or unable to establish connections.');
       }
     } catch (error) {
       console.error('Error in network discovery:', error);
@@ -318,8 +340,23 @@ class DecentralizedNode extends EventEmitter {
         return;
       }
 
-      if (nodeInfo.port === this.port &&
-        (nodeInfo.host === 'localhost' || nodeInfo.host === '127.0.0.1' || nodeInfo.host === this.publicIp)) {
+      // If we're a local node, prefer connecting to cloud nodes
+      if (!this.isCloudNode && !nodeInfo.isCloudNode) {
+        console.log('Local node skipping connection to another local node');
+        reject(new Error('Local to local connection skipped'));
+        return;
+      }
+
+      // Check if it's trying to connect to self
+      const isSelf = (
+        nodeInfo.port === this.port &&
+        (nodeInfo.host === 'localhost' ||
+          nodeInfo.host === '127.0.0.1' ||
+          nodeInfo.host === this.localIp ||
+          nodeInfo.host === this.publicIp)
+      );
+
+      if (isSelf) {
         reject(new Error('Cannot connect to self'));
         return;
       }
@@ -329,6 +366,7 @@ class DecentralizedNode extends EventEmitter {
         return;
       }
 
+      console.log(`Attempting connection to ${nodeInfo.host}:${nodeInfo.port}`);
       const ws = new WebSocket(`ws://${nodeInfo.host}:${nodeInfo.port}`);
       let connectionTimeout;
 
@@ -345,15 +383,18 @@ class DecentralizedNode extends EventEmitter {
 
       ws.on('error', (error) => {
         cleanup();
+        console.log(`Connection error to ${nodeInfo.host}:${nodeInfo.port}:`, error.message);
         reject(error);
       });
 
       ws.on('open', () => {
         cleanup();
+        console.log(`Connected successfully to ${nodeInfo.host}:${nodeInfo.port}`);
         ws.send(JSON.stringify({
           type: 'INFO',
           nodeId: this.nodeId,
           port: this.port,
+          isCloudNode: this.isCloudNode,
           state: this.state
         }));
 
