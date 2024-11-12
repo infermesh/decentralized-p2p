@@ -2,6 +2,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createHash, randomBytes } from 'crypto';
 import { EventEmitter } from 'events';
 import https from 'https';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 
 class DecentralizedNode extends EventEmitter {
   constructor(privateKey) {
@@ -15,6 +18,8 @@ class DecentralizedNode extends EventEmitter {
       timestamp: Date.now()
     };
     this.port = 3000 + Math.floor(Math.random() * 1000);
+    this.statePath = join(homedir(), '.infermesh', 'states');
+    this.stateFile = join(this.statePath, `${this.nodeId}.json`);
   }
 
   generateNodeId() {
@@ -40,7 +45,40 @@ class DecentralizedNode extends EventEmitter {
     });
   }
 
+  async saveState() {
+    try {
+      await fs.mkdir(this.statePath, { recursive: true });
+      await fs.writeFile(
+        this.stateFile,
+        JSON.stringify({
+          nodeId: this.nodeId,
+          state: this.state,
+          timestamp: Date.now()
+        }, null, 2)
+      );
+      console.log('State saved to disk');
+    } catch (error) {
+      console.error('Error saving state:', error);
+    }
+  }
+
+  async loadState() {
+    try {
+      const data = await fs.readFile(this.stateFile, 'utf8');
+      const savedData = JSON.parse(data);
+      if (savedData.nodeId === this.nodeId) {
+        this.state = savedData.state;
+        console.log('State loaded from disk');
+      }
+    } catch (error) {
+      console.log('No previous state found, starting fresh');
+    }
+  }
+
   async initialize() {
+    // Load saved state first
+    await this.loadState();
+
     this.server = new WebSocketServer({
       port: this.port,
       host: '0.0.0.0'
@@ -60,6 +98,9 @@ class DecentralizedNode extends EventEmitter {
       console.log(`Incoming connection from ${remoteAddress}`);
       this.handleConnection(ws, remoteAddress);
     });
+
+    // Save state periodically
+    setInterval(() => this.saveState(), 5000);
 
     return true;
   }
@@ -128,6 +169,7 @@ class DecentralizedNode extends EventEmitter {
         }
         if (message.state.version > this.state.version) {
           this.state = message.state;
+          await this.saveState(); // Save when receiving new state
           this.emit('stateUpdated', this.state);
         }
         break;
@@ -139,6 +181,7 @@ class DecentralizedNode extends EventEmitter {
             version: message.version,
             timestamp: Date.now()
           };
+          await this.saveState(); // Save when state is updated
           this.broadcast(message, ws);
           this.emit('stateUpdated', this.state);
         }
@@ -149,6 +192,7 @@ class DecentralizedNode extends EventEmitter {
           delete this.state.data[message.key];
           this.state.version = message.version;
           this.state.timestamp = Date.now();
+          await this.saveState(); // Save when state is deleted
           this.broadcast(message, ws);
           this.emit('stateUpdated', this.state);
         }
@@ -186,6 +230,9 @@ class DecentralizedNode extends EventEmitter {
     this.state.data[key] = value;
     this.state.timestamp = Date.now();
 
+    // Save state immediately after update
+    await this.saveState();
+
     this.broadcast({
       type: 'STATE_UPDATE',
       data: { [key]: value },
@@ -200,6 +247,9 @@ class DecentralizedNode extends EventEmitter {
       this.state.version++;
       delete this.state.data[key];
       this.state.timestamp = Date.now();
+
+      // Save state immediately after deletion
+      await this.saveState();
 
       this.broadcast({
         type: 'DELETE_STATE',
