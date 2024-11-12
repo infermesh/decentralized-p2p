@@ -243,16 +243,49 @@ function startShell(node) {
 
         case 'connect':
           if (args.length < 2) {
-            console.log(chalk.red('Usage: connect <nodeId>'));
+            console.log(chalk.red('Usage:'));
+            console.log(chalk.yellow('  connect <nodeId>') + ' - Connect using node ID (preferred)');
+            console.log(chalk.yellow('  connect <host> <port>') + ' - Connect using host and port');
             break;
           }
 
-          const targetNode = nodes.find(n => n.nodeId.startsWith(args[1]));
-          if (targetNode) {
-            await node.connect(targetNode.host, targetNode.port);
-            console.log(chalk.green('Connected successfully'));
-          } else {
-            console.log(chalk.red('Node not found'));
+          try {
+            const config = await loadConfig();
+
+            if (args.length === 2) {
+              // Connect by node ID
+              const targetNodeId = args[1];
+
+              // Check if we have this node's info in our config
+              const knownPeer = config.peers.find(p => p.nodeId === targetNodeId);
+
+              if (knownPeer) {
+                await node.connect(knownPeer.host, knownPeer.port);
+                console.log(chalk.green(`Connected to node ${targetNodeId}`));
+              } else {
+                console.log(chalk.red('Node ID not found in known peers.'));
+                console.log('Use discover command to find available nodes.');
+              }
+            } else {
+              // Traditional host:port connection
+              const host = args[1];
+              const port = parseInt(args[2]);
+              const connectedNode = await node.connect(host, port);
+
+              // Save the node info for future connections
+              if (!config.peers.some(p => p.host === host && p.port === port)) {
+                config.peers.push({
+                  nodeId: connectedNode.nodeId,
+                  host,
+                  port,
+                  lastSeen: Date.now()
+                });
+                await saveConfig(config);
+              }
+              console.log(chalk.green(`Connected to ${host}:${port}`));
+            }
+          } catch (error) {
+            console.error(chalk.red('Connection failed:'), error.message);
           }
           break;
 
