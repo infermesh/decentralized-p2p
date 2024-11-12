@@ -2,7 +2,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createHash } from 'crypto';
 import { EventEmitter } from 'events';
-import https from 'https';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -34,19 +33,6 @@ class DecentralizedNode extends EventEmitter {
       .update(this.privateKey)
       .digest('hex');
   }
-
-  import { WebSocketServer, WebSocket } from 'ws';
-import { createHash } from 'crypto';
-import { EventEmitter } from 'events';
-import https from 'https';
-import { promises as fs } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
-import { networkInterfaces } from 'os';
-import fetch from 'node-fetch'; // Add this import at the top
-
-class DecentralizedNode extends EventEmitter {
-  // ... previous constructor and other methods ...
 
   async getLocalIp() {
     try {
