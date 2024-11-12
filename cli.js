@@ -72,20 +72,40 @@ async function createInteractiveCLI(node) {
           break;
 
         case 'discover':
-          console.log(chalk.cyan('Discovering peers...'));
-          const peers = await node.discoverPeers();
-          if (peers.length > 0) {
-            peers.forEach(peer => {
-              if (peer.isSelf) {
-                console.log(chalk.blue(`\nThis Node (${peer.nodeId}):`));
+          console.log(chalk.cyan('\nDiscovering nodes...'));
+          const nodes = await node.discoverNodes();
+
+          if (nodes.length > 0) {
+            // Sort nodes: self first, then connected, then others
+            nodes.sort((a, b) => {
+              if (a.isSelf) return -1;
+              if (b.isSelf) return 1;
+              if (a.isConnected && !b.isConnected) return -1;
+              if (!a.isConnected && b.isConnected) return 1;
+              return b.lastSeen - a.lastSeen;
+            });
+
+            nodes.forEach(nodeInfo => {
+              if (nodeInfo.isSelf) {
+                console.log(chalk.blue('\nThis Node'));
+              } else if (nodeInfo.isConnected) {
+                console.log(chalk.green('\nConnected Node'));
               } else {
-                console.log(chalk.yellow(`\nPeer (${peer.nodeId}):`));
+                console.log(chalk.yellow('\nDiscovered Node'));
               }
-              console.log(`Host: ${peer.host}`);
-              console.log(`Port: ${peer.port}`);
+
+              console.log(`Node ID: ${nodeInfo.nodeId}`);
+              console.log(`Host: ${nodeInfo.host}`);
+              console.log(`Port: ${nodeInfo.port}`);
+              console.log(`Last Seen: ${new Date(nodeInfo.lastSeen).toLocaleString()}`);
+              console.log(`State Version: ${nodeInfo.state.version}`);
+
+              if (!nodeInfo.isSelf && !nodeInfo.isConnected) {
+                console.log(chalk.gray(`Connect with: connect ${nodeInfo.nodeId}`));
+              }
             });
           } else {
-            console.log(chalk.yellow('No peers discovered.'));
+            console.log(chalk.yellow('No nodes discovered.'));
           }
           break;
 
@@ -110,24 +130,50 @@ async function createInteractiveCLI(node) {
           break;
 
         case 'connect':
-          if (args.length < 3) {
-            console.log(chalk.red('Usage: connect <host> <port>'));
+          if (args.length < 2) {
+            console.log(chalk.red('Usage:'));
+            console.log(chalk.yellow('  connect <nodeId>') + ' - Connect using node ID (preferred)');
+            console.log(chalk.yellow('  connect <host> <port>') + ' - Connect using host and port');
             break;
           }
-          const host = args[1];
-          const port = parseInt(args[2]);
 
           try {
-            await node.connect(host, port);
-            console.log(chalk.green(`Connected to peer ${host}:${port}`));
-
             const config = await loadConfig();
-            if (!config.peers.some(p => p.host === host && p.port === port)) {
-              config.peers.push({ host, port });
-              await saveConfig(config);
+
+            if (args.length === 2) {
+              // Connect by node ID
+              const targetNodeId = args[1];
+
+              // Check if we have this node's info in our config
+              const knownPeer = config.peers.find(p => p.nodeId === targetNodeId);
+
+              if (knownPeer) {
+                await node.connect(knownPeer.host, knownPeer.port);
+                console.log(chalk.green(`Connected to node ${targetNodeId}`));
+              } else {
+                console.log(chalk.red('Node ID not found in known peers.'));
+                console.log('Use discover command to find available nodes.');
+              }
+            } else {
+              // Traditional host:port connection
+              const host = args[1];
+              const port = parseInt(args[2]);
+              const connectedNode = await node.connect(host, port);
+
+              // Save the node info for future connections
+              if (!config.peers.some(p => p.host === host && p.port === port)) {
+                config.peers.push({
+                  nodeId: connectedNode.nodeId,
+                  host,
+                  port,
+                  lastSeen: Date.now()
+                });
+                await saveConfig(config);
+              }
+              console.log(chalk.green(`Connected to ${host}:${port}`));
             }
           } catch (error) {
-            console.error(chalk.red(`Failed to connect: ${error.message}`));
+            console.error(chalk.red('Connection failed:'), error.message);
           }
           break;
 

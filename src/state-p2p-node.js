@@ -18,6 +18,10 @@ class DecentralizedNode extends EventEmitter {
       timestamp: Date.now()
     };
     this.port = 3000 + Math.floor(Math.random() * 1000);
+
+    // Paths for persistence
+    this.nodePath = join(homedir(), '.infermesh', 'nodes');
+    this.nodeFile = join(this.nodePath, `${this.nodeId}.json`);
     this.statePath = join(homedir(), '.infermesh', 'states');
     this.stateFile = join(this.statePath, `${this.nodeId}.json`);
   }
@@ -56,7 +60,6 @@ class DecentralizedNode extends EventEmitter {
           timestamp: Date.now()
         }, null, 2)
       );
-      // console.log('State saved to disk');
     } catch (error) {
       console.error('Error saving state:', error);
     }
@@ -75,8 +78,86 @@ class DecentralizedNode extends EventEmitter {
     }
   }
 
+  async registerNode() {
+    try {
+      await fs.mkdir(this.nodePath, { recursive: true });
+      const nodeInfo = {
+        nodeId: this.nodeId,
+        host: this.publicIp || 'localhost',
+        port: this.port,
+        lastSeen: Date.now(),
+        startTime: Date.now(),
+        state: {
+          version: this.state.version,
+          timestamp: this.state.timestamp
+        }
+      };
+
+      await fs.writeFile(
+        this.nodeFile,
+        JSON.stringify(nodeInfo, null, 2)
+      );
+      console.log('Node registered successfully');
+    } catch (error) {
+      console.error('Error registering node:', error);
+    }
+  }
+
+  async updateNodeRegistry() {
+    try {
+      if (await fs.access(this.nodeFile).then(() => true).catch(() => false)) {
+        const nodeInfo = JSON.parse(await fs.readFile(this.nodeFile, 'utf8'));
+        nodeInfo.lastSeen = Date.now();
+        nodeInfo.state = {
+          version: this.state.version,
+          timestamp: this.state.timestamp
+        };
+        await fs.writeFile(this.nodeFile, JSON.stringify(nodeInfo, null, 2));
+      } else {
+        await this.registerNode();
+      }
+    } catch (error) {
+      await this.registerNode();
+    }
+  }
+
+  async discoverNodes() {
+    const nodes = [];
+    try {
+      const files = await fs.readdir(this.nodePath);
+
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          try {
+            const data = await fs.readFile(join(this.nodePath, file), 'utf8');
+            const nodeInfo = JSON.parse(data);
+
+            // Check if node was seen in the last hour
+            if (Date.now() - nodeInfo.lastSeen < 3600000) {
+              // Add connection status
+              nodeInfo.isConnected = this.peers.has(nodeInfo.nodeId);
+              nodeInfo.isSelf = nodeInfo.nodeId === this.nodeId;
+              nodes.push(nodeInfo);
+            } else {
+              // Clean up old node files
+              await fs.unlink(join(this.nodePath, file));
+            }
+          } catch (error) {
+            console.error(`Error reading node file ${file}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error discovering nodes:', error);
+    }
+    return nodes;
+  }
+
   async initialize() {
-    // Load saved state first
+    await fs.mkdir(this.nodePath, { recursive: true });
+    await fs.mkdir(this.statePath, { recursive: true });
+
+    // Load saved state
     await this.loadState();
 
     this.server = new WebSocketServer({
@@ -93,42 +174,43 @@ class DecentralizedNode extends EventEmitter {
       console.log('Running on local network');
     }
 
+    // Register node
+    await this.registerNode();
+
+    // Auto-connect to active nodes
+    console.log('\nDiscovering and connecting to active nodes...');
+    const nodes = await this.discoverNodes();
+    for (const nodeInfo of nodes) {
+      if (!nodeInfo.isSelf) {
+        try {
+          console.log(`Attempting to connect to node ${nodeInfo.nodeId}`);
+          await this.connect(nodeInfo.host, nodeInfo.port);
+          console.log(`Successfully connected to node ${nodeInfo.nodeId}`);
+        } catch (error) {
+          console.log(`Failed to connect to node ${nodeInfo.nodeId}: ${error.message}`);
+        }
+      }
+    }
+
+    // Show connection summary
+    const connectedNodes = this.peers.size;
+    if (connectedNodes > 0) {
+      console.log(`\nConnected to ${connectedNodes} active node${connectedNodes > 1 ? 's' : ''}`);
+    } else {
+      console.log('\nNo active nodes found. This is the first node in the network.');
+    }
+
+    // Set up periodic updates
+    setInterval(() => this.updateNodeRegistry(), 30000);
+    setInterval(() => this.saveState(), 5000);
+
     this.server.on('connection', (ws, req) => {
       const remoteAddress = req.socket.remoteAddress;
       console.log(`Incoming connection from ${remoteAddress}`);
       this.handleConnection(ws, remoteAddress);
     });
 
-    // Save state periodically
-    setInterval(() => this.saveState(), 5000);
-
     return true;
-  }
-
-  async discoverPeers() {
-    const peers = [];
-
-    // Add self if public IP is available
-    if (this.publicIp) {
-      peers.push({
-        nodeId: this.nodeId,
-        host: this.publicIp,
-        port: this.port,
-        isSelf: true
-      });
-    }
-
-    // Add connected peers
-    for (const [nodeId, peer] of this.peers.entries()) {
-      peers.push({
-        nodeId,
-        host: peer.host || 'unknown',
-        port: peer.port,
-        isSelf: false
-      });
-    }
-
-    return peers;
   }
 
   handleConnection(ws, remoteAddress) {
@@ -169,7 +251,6 @@ class DecentralizedNode extends EventEmitter {
         }
         if (message.state.version > this.state.version) {
           this.state = message.state;
-          await this.saveState(); // Save when receiving new state
           this.emit('stateUpdated', this.state);
         }
         break;
@@ -181,7 +262,7 @@ class DecentralizedNode extends EventEmitter {
             version: message.version,
             timestamp: Date.now()
           };
-          await this.saveState(); // Save when state is updated
+          await this.saveState();
           this.broadcast(message, ws);
           this.emit('stateUpdated', this.state);
         }
@@ -192,7 +273,7 @@ class DecentralizedNode extends EventEmitter {
           delete this.state.data[message.key];
           this.state.version = message.version;
           this.state.timestamp = Date.now();
-          await this.saveState(); // Save when state is deleted
+          await this.saveState();
           this.broadcast(message, ws);
           this.emit('stateUpdated', this.state);
         }
@@ -210,15 +291,43 @@ class DecentralizedNode extends EventEmitter {
 
   async connect(host, port) {
     return new Promise((resolve, reject) => {
+      if (host === 'localhost' && port === this.port) {
+        reject(new Error('Cannot connect to self'));
+        return;
+      }
+
       const ws = new WebSocket(`ws://${host}:${port}`);
+      let nodeInfo = null;
+
+      const timeout = setTimeout(() => {
+        ws.close();
+        reject(new Error('Connection timeout'));
+      }, 5000);
 
       ws.on('open', () => {
-        console.log(`Connected to peer ${host}:${port}`);
+        console.log(`Connected to ${host}:${port}`);
         this.handleConnection(ws, host);
-        resolve(true);
+      });
+
+      ws.on('message', (data) => {
+        try {
+          const message = JSON.parse(data.toString());
+          if (message.type === 'INFO') {
+            nodeInfo = {
+              nodeId: message.nodeId,
+              host,
+              port
+            };
+            clearTimeout(timeout);
+            resolve(nodeInfo);
+          }
+        } catch (error) {
+          console.error('Error processing message:', error);
+        }
       });
 
       ws.on('error', (error) => {
+        clearTimeout(timeout);
         console.error(`Failed to connect to ${host}:${port}:`, error.message);
         reject(error);
       });
@@ -230,7 +339,6 @@ class DecentralizedNode extends EventEmitter {
     this.state.data[key] = value;
     this.state.timestamp = Date.now();
 
-    // Save state immediately after update
     await this.saveState();
 
     this.broadcast({
@@ -248,7 +356,6 @@ class DecentralizedNode extends EventEmitter {
       delete this.state.data[key];
       this.state.timestamp = Date.now();
 
-      // Save state immediately after deletion
       await this.saveState();
 
       this.broadcast({
