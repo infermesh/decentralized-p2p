@@ -239,7 +239,8 @@ program
 program
   .command('init')
   .description('Initialize a new node')
-  .option('--cloud', 'Initialize as a cloud node')
+  .option('--ec2', 'Initialize as an EC2 node')
+  .option('--address <address>', 'Manually specify public address')
   .option('-p, --port <number>', 'Specify port number')
   .action(async (options) => {
     try {
@@ -251,10 +252,12 @@ program
       }
 
       const nodeOptions = {
-        isCloudNode: options.cloud || false,
+        nodeType: options.ec2 ? 'ec2' : (options.address ? 'manual' : 'local'),
+        manualAddress: options.address,
         port: options.port ? parseInt(options.port) : null
       };
 
+      console.log('Initializing node with options:', nodeOptions);
       const node = new DecentralizedNode(config.privateKey, nodeOptions);
       await node.initialize();
       await createInteractiveCLI(node);

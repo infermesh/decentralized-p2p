@@ -19,15 +19,14 @@ class DecentralizedNode extends EventEmitter {
       version: 0,
       timestamp: Date.now()
     };
-    // Allow custom port configuration
     this.port = options.port || (3000 + Math.floor(Math.random() * 1000));
     this.nodePath = join(homedir(), '.infermesh', 'nodes');
     this.nodeFile = join(this.nodePath, `${this.nodeId}.json`);
     this.statePath = join(homedir(), '.infermesh', 'states');
     this.stateFile = join(this.statePath, `${this.nodeId}.json`);
     this.connectionAttempts = new Map();
-    this.isCloudNode = options.isCloudNode || false; // Flag to indicate if running in cloud
-    this.knownNodes = new Set(); // Track known node addresses
+    this.nodeType = options.nodeType || 'local'; // 'local', 'ec2', or 'manual'
+    this.manualAddress = options.manualAddress; // For manually specified address
   }
 
   generateNodeId() {
@@ -121,16 +120,41 @@ class DecentralizedNode extends EventEmitter {
     }
   }
 
+  async getEC2PublicIP() {
+    try {
+      const response = await fetch('http://169.254.169.254/latest/meta-data/public-ipv4', {
+        timeout: 2000
+      });
+      return await response.text();
+    } catch (error) {
+      console.error('Error getting EC2 public IP:', error);
+      throw error;
+    }
+  }
+
+  async getEC2PrivateIP() {
+    try {
+      const response = await fetch('http://169.254.169.254/latest/meta-data/local-ipv4', {
+        timeout: 2000
+      });
+      return await response.text();
+    } catch (error) {
+      console.error('Error getting EC2 private IP:', error);
+      throw error;
+    }
+  }
+
   async registerNode() {
     try {
       await fs.mkdir(this.nodePath, { recursive: true });
       const nodeInfo = {
         nodeId: this.nodeId,
-        host: this.publicIp || this.localIp || 'localhost',
+        publicHost: this.publicIp,
+        privateHost: this.privateIp,
         port: this.port,
         lastSeen: Date.now(),
         startTime: Date.now(),
-        isCloudNode: this.isCloudNode,
+        nodeType: this.nodeType,
         state: {
           version: this.state.version,
           timestamp: this.state.timestamp
@@ -142,8 +166,7 @@ class DecentralizedNode extends EventEmitter {
         JSON.stringify(nodeInfo, null, 2)
       );
 
-      console.log(`Node registered as ${this.isCloudNode ? 'cloud' : 'local'} node`);
-      console.log(`Node address: ${nodeInfo.host}:${nodeInfo.port}`);
+      console.log('Node registered successfully:', nodeInfo);
     } catch (error) {
       console.error('Error registering node:', error);
     }
@@ -209,43 +232,53 @@ class DecentralizedNode extends EventEmitter {
   async initialize() {
     await fs.mkdir(this.nodePath, { recursive: true });
     await fs.mkdir(this.statePath, { recursive: true });
-
-    // Load saved state
     await this.loadState();
 
-    // Start the WebSocket server
+    // Start WebSocket server
     this.server = new WebSocketServer({
       port: this.port,
       host: '0.0.0.0'
     });
 
+    // Get IP addresses
     try {
-      this.publicIp = await this.getPublicIp();
-      console.log(`Node ${this.nodeId} listening on port ${this.port}`);
-      console.log('Public IP address:', this.publicIp);
+      if (this.nodeType === 'ec2') {
+        // For EC2, use instance metadata service
+        this.publicIp = await this.getEC2PublicIP();
+        this.privateIp = await this.getEC2PrivateIP();
+      } else if (this.nodeType === 'manual' && this.manualAddress) {
+        this.publicIp = this.manualAddress;
+        this.privateIp = await this.getLocalIp();
+      } else {
+        this.publicIp = await this.getPublicIp();
+        this.privateIp = await this.getLocalIp();
+      }
+
+      console.log(`Node ${this.nodeId} configuration:`);
+      console.log(`Type: ${this.nodeType}`);
+      console.log(`Port: ${this.port}`);
+      console.log(`Public IP: ${this.publicIp}`);
+      console.log(`Private IP: ${this.privateIp}`);
     } catch (error) {
-      console.log(`Node ${this.nodeId} listening on port ${this.port}`);
-      console.log('Running on local network');
+      console.error('Error getting IP addresses:', error);
+      this.privateIp = await this.getLocalIp();
+      console.log(`Fallback to local IP: ${this.privateIp}`);
     }
 
-    // Register node
     await this.registerNode();
 
-    // Set up server connection handling
     this.server.on('connection', (ws, req) => {
       const remoteAddress = req.socket.remoteAddress;
       console.log(`Incoming connection from ${remoteAddress}`);
       this.handleConnection(ws, remoteAddress);
     });
 
-    // Start periodic node discovery and connection
+    // Start discovery and maintenance tasks
     await this.startNetworkDiscovery();
-
-    // Set up periodic tasks
     setInterval(() => this.updateNodeRegistry(), 30000);
     setInterval(() => this.saveState(), 5000);
-    setInterval(() => this.startNetworkDiscovery(), 60000);
-    setInterval(() => this.checkPeerHealth(), 30000);
+    setInterval(() => this.startNetworkDiscovery(), 15000);
+    setInterval(() => this.checkPeerHealth(), 10000);
 
     return true;
   }
@@ -289,45 +322,51 @@ class DecentralizedNode extends EventEmitter {
       console.log('\nDiscovering network nodes...');
       const nodes = await this.discoverNodes();
 
-      // Log found nodes
       if (nodes.length > 0) {
-        console.log('Found nodes:');
+        console.log('\nFound nodes:');
         nodes.forEach(node => {
-          console.log(`- Node ${node.nodeId} at ${node.host}:${node.port} (${node.isCloudNode ? 'cloud' : 'local'})`);
+          console.log(`\nNode ID: ${node.nodeId}`);
+          console.log(`Type: ${node.nodeType}`);
+          console.log(`Public Address: ${node.publicHost}:${node.port}`);
+          console.log(`Private Address: ${node.privateHost}:${node.port}`);
+          console.log(`Status: ${node.isConnected ? 'Connected' : 'Not Connected'}`);
         });
       }
 
       for (const nodeInfo of nodes) {
         if (nodeInfo.isSelf || nodeInfo.isConnected) continue;
 
-        const lastAttempt = this.connectionAttempts.get(nodeInfo.nodeId);
-        const now = Date.now();
-        if (lastAttempt && (now - lastAttempt) < 300000) continue;
+        // Try both public and private addresses
+        const addresses = [
+          { host: nodeInfo.publicHost, type: 'public' },
+          { host: nodeInfo.privateHost, type: 'private' }
+        ].filter(addr => addr.host);
 
-        this.connectionAttempts.set(nodeInfo.nodeId, now);
+        for (const addr of addresses) {
+          try {
+            console.log(`\nAttempting ${addr.type} address connection to node ${nodeInfo.nodeId}`);
+            console.log(`Address: ${addr.host}:${nodeInfo.port}`);
 
-        try {
-          if (!this.isCloudNode) {
-            // Local nodes should only connect to cloud nodes
-            if (!nodeInfo.isCloudNode) {
-              console.log(`Skipping local-to-local connection to ${nodeInfo.nodeId}`);
-              continue;
-            }
+            await this.connectToNode({
+              ...nodeInfo,
+              host: addr.host
+            });
+
+            console.log(`Successfully connected to node ${nodeInfo.nodeId} via ${addr.type} address`);
+            break; // Stop trying addresses if one succeeds
+          } catch (error) {
+            console.log(`Failed connection to ${addr.type} address: ${error.message}`);
           }
-
-          await this.connectToNode(nodeInfo);
-          console.log(`Successfully connected to node ${nodeInfo.nodeId}`);
-        } catch (error) {
-          console.log(`Failed to connect to node ${nodeInfo.nodeId}: ${error.message}`);
         }
       }
 
+      // Connection summary
       const connectedNodes = this.peers.size;
-      if (connectedNodes > 0) {
-        console.log(`\nConnected to ${connectedNodes} active node${connectedNodes > 1 ? 's' : ''}`);
-      } else {
-        console.log('\nNo active nodes found or unable to establish connections.');
-      }
+      console.log('\nConnection Summary:');
+      console.log(`Connected Peers: ${connectedNodes}`);
+      this.peers.forEach((peer, peerId) => {
+        console.log(`- Connected to: ${peerId}`);
+      });
     } catch (error) {
       console.error('Error in network discovery:', error);
     }
