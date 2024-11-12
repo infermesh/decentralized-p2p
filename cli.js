@@ -66,6 +66,13 @@ async function createInteractiveCLI(node) {
     prompt: chalk.blue('mesh> ')
   });
 
+  // Handle clean shutdown on CTRL+C
+  process.on('SIGINT', async () => {
+    console.log(chalk.yellow('\nShutting down...'));
+    await node.shutdown();
+    process.exit(0);
+  });
+
   rl.prompt();
 
   rl.on('line', async (line) => {
@@ -92,6 +99,7 @@ async function createInteractiveCLI(node) {
               console.log(`ID: ${n.nodeId}`);
               console.log(`Host: ${n.host}`);
               console.log(`Port: ${n.port}`);
+              console.log(`Last Seen: ${new Date(n.lastSeen).toLocaleString()}`);
             });
           } else {
             console.log(chalk.yellow('No nodes discovered.'));
@@ -149,23 +157,25 @@ async function createInteractiveCLI(node) {
               if (targetNode) {
                 console.log(chalk.blue(`Found node ${targetNode.nodeId}`));
                 console.log(chalk.blue(`Connecting to ${targetNode.host}:${targetNode.port}`));
-                await node.connect(targetNode.host, targetNode.port);
+                await node.connectToNode(targetNode);
                 console.log(chalk.green('Connected successfully!'));
               } else {
                 console.log(chalk.red('Node not found in the network'));
-                console.log('Available nodes:');
-                for (const n of nodes) {
-                  if (n.nodeId !== node.nodeId) {
-                    console.log(chalk.yellow(`${n.nodeId}`));
-                    console.log(`  Host: ${n.host}`);
-                    console.log(`  Port: ${n.port}`);
+                if (nodes.length > 0) {
+                  console.log('Available nodes:');
+                  for (const n of nodes) {
+                    if (!n.isSelf) {
+                      console.log(chalk.yellow(`${n.nodeId}`));
+                      console.log(`  Host: ${n.host}`);
+                      console.log(`  Port: ${n.port}`);
+                    }
                   }
                 }
               }
             } else {
               const host = args[1];
               const port = parseInt(args[2]);
-              await node.connect(host, port);
+              await node.connectToNode({ host, port });
               console.log(chalk.green(`Connected to ${host}:${port}`));
             }
           } catch (error) {
@@ -177,8 +187,10 @@ async function createInteractiveCLI(node) {
           console.log(chalk.cyan('\nNode Status:'));
           console.log(`ID: ${node.nodeId}`);
           if (node.publicIp) console.log(`Public IP: ${node.publicIp}`);
+          console.log(`Port: ${node.port}`);
           console.log(`Connected Peers: ${node.peers.size}`);
           console.log(`State Version: ${node.state.version}`);
+          console.log(`Last Updated: ${new Date(node.state.timestamp).toLocaleString()}`);
           break;
 
         case 'help':
@@ -187,6 +199,7 @@ async function createInteractiveCLI(node) {
 
         case 'exit':
           console.log(chalk.yellow('Goodbye!'));
+          await node.shutdown();
           process.exit(0);
           break;
 
@@ -209,8 +222,9 @@ async function createInteractiveCLI(node) {
     rl.prompt();
   });
 
-  rl.on('close', () => {
+  rl.on('close', async () => {
     console.log(chalk.yellow('Goodbye!'));
+    await node.shutdown();
     process.exit(0);
   });
 }
