@@ -26,7 +26,7 @@ InferMesh is a revolutionary approach to peer-to-peer networking where nodes wea
 ## Quick Install
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/infermesh/decentralized-p2p/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/infermesh/decentralized-p2p/main/install.sh | sh
 ```
 
 ## Usage
