@@ -14,6 +14,16 @@ REPO_URL="https://raw.githubusercontent.com/infermesh/decentralized-p2p/main"
 INSTALL_DIR="$HOME/.infermesh"
 TEMP_DIR="/tmp/infermesh-install"
 
+# Check for required commands
+if ! command -v npm &> /dev/null; then
+  echo -e "${RED}npm is required but not installed. Please install npm and try again.${NC}"
+  exit 1
+fi
+if ! command -v curl &> /dev/null; then
+  echo -e "${RED}curl is required but not installed. Please install curl and try again.${NC}"
+  exit 1
+fi
+
 echo -e "${BLUE}Installing InferMesh...${NC}"
 
 # Create temporary directory for downloads
@@ -28,9 +38,9 @@ curl -sSL "$REPO_URL/state-p2p-node.js" -o "$TEMP_DIR/state-p2p-node.js"
 
 # Check if installation exists
 if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Existing installation found at $INSTALL_DIR${NC}"
-    echo -e "${YELLOW}Removing old installation...${NC}"
-    rm -rf "$INSTALL_DIR"
+  echo -e "${YELLOW}Existing installation found at $INSTALL_DIR${NC}"
+  echo -e "${YELLOW}Removing old installation...${NC}"
+  rm -rf "$INSTALL_DIR"
 fi
 
 # Create directory structure
@@ -78,20 +88,20 @@ chmod +x "$INSTALL_DIR/bin/mesh"
 
 # Function to add to shell config if not present
 add_to_shell_config() {
-    local config_file="$1"
-    local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
+  local config_file="$1"
+  local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
+  
+  if [ -f "$config_file" ]; then
+    # Remove old InferMesh PATH entries if they exist
+    sed -i '/# InferMesh PATH/d' "$config_file" 2>/dev/null
+    sed -i "\#$INSTALL_DIR/bin#d" "$config_file" 2>/dev/null
     
-    if [ -f "$config_file" ]; then
-        # Remove old InferMesh PATH entries if they exist
-        sed -i '/# InferMesh PATH/d' "$config_file" 2>/dev/null
-        sed -i "\#$INSTALL_DIR/bin#d" "$config_file" 2>/dev/null
-        
-        # Add new entry
-        echo "" >> "$config_file"
-        echo "# InferMesh PATH" >> "$config_file"
-        echo "$path_line" >> "$config_file"
-        echo -e "${GREEN}Updated PATH in ${config_file}${NC}"
-    fi
+    # Add new entry
+    echo "" >> "$config_file"
+    echo "# InferMesh PATH" >> "$config_file"
+    echo "$path_line" >> "$config_file"
+    echo -e "${GREEN}Updated PATH in ${config_file}${NC}"
+  fi
 }
 
 # Add to various shell configs
@@ -114,9 +124,9 @@ echo -e "\nThen try: ${BLUE}mesh help${NC}"
 
 # Try to source the appropriate RC file
 if [ -n "$ZSH_VERSION" ]; then
-    source "$HOME/.zshrc" >/dev/null 2>&1
+  source "$HOME/.zshrc" >/dev/null 2>&1
 elif [ -n "$BASH_VERSION" ]; then
-    source "$HOME/.bashrc" >/dev/null 2>&1
+  source "$HOME/.bashrc" >/dev/null 2>&1
 fi
 
 echo -e "\n${BLUE}Installation directory: ${NC}$INSTALL_DIR"
