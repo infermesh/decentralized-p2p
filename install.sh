@@ -15,12 +15,13 @@ INSTALL_DIR="$HOME/.infermesh"
 TEMP_DIR="/tmp/infermesh-install"
 
 # Check for required commands
-if ! command -v npm &> /dev/null; then
-  echo -e "${RED}npm is required but not installed. Please install npm and try again.${NC}"
+if ! command -v npm > /dev/null; then
+  printf "${RED}npm is required but not installed. Please install npm and try again.${NC}\n"
   exit 1
 fi
-if ! command -v curl &> /dev/null; then
-  echo -e "${RED}curl is required but not installed. Please install curl and try again.${NC}"
+
+if ! command -v curl > /dev/null; then
+  printf "${RED}curl is required but not installed. Please install curl and try again.${NC}\n"
   exit 1
 fi
 
