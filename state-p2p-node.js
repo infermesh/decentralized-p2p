@@ -35,27 +35,74 @@ class DecentralizedNode extends EventEmitter {
       .digest('hex');
   }
 
-  async getPublicIp() {
-    return new Promise((resolve, reject) => {
-      const req = https.get('https://api.ipify.org?format=json', (resp) => {
-        let data = '';
-        resp.on('data', chunk => data += chunk);
-        resp.on('end', () => {
-          try {
-            const ip = JSON.parse(data).ip;
-            resolve(ip);
-          } catch (error) {
-            reject(error);
-          }
-        });
-      });
+  import { WebSocketServer, WebSocket } from 'ws';
+import { createHash } from 'crypto';
+import { EventEmitter } from 'events';
+import https from 'https';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
+import { networkInterfaces } from 'os';
+import fetch from 'node-fetch'; // Add this import at the top
 
-      req.on('error', reject);
-      req.setTimeout(5000, () => {
-        req.destroy();
-        reject(new Error('IP lookup timeout'));
-      });
-    });
+class DecentralizedNode extends EventEmitter {
+  // ... previous constructor and other methods ...
+
+  async getLocalIp() {
+    try {
+      const nets = networkInterfaces();
+      const results = [];
+
+      for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+          // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+          // Also skip over internal docker/vm interfaces
+          if (net.family === 'IPv4' && !net.internal && !name.includes('docker') && !name.includes('veth')) {
+            results.push(net.address);
+          }
+        }
+      }
+
+      // Prefer addresses that aren't in special ranges
+      const preferredIp = results.find(ip =>
+        !ip.startsWith('172.') &&
+        !ip.startsWith('10.') &&
+        !ip.startsWith('192.168.')
+      );
+
+      return preferredIp || results[0] || 'localhost';
+    } catch (error) {
+      console.error('Error getting local IP:', error);
+      return 'localhost';
+    }
+  }
+
+  async getPublicIp() {
+    try {
+      // Try multiple IP services in case one fails
+      const services = [
+        'https://api.ipify.org?format=json',
+        'https://api.ip.sb/jsonip',
+        'https://api.myip.com'
+      ];
+
+      for (const service of services) {
+        try {
+          const response = await fetch(service, { timeout: 5000 });
+          const data = await response.json();
+          // Different services use different response formats
+          const ip = data.ip || data.YourFuckingIPAddress || data.IPv4;
+          if (ip) return ip;
+        } catch (e) {
+          continue; // Try next service if one fails
+        }
+      }
+
+      throw new Error('Could not determine public IP');
+    } catch (error) {
+      console.error('Error getting public IP:', error);
+      throw error;
+    }
   }
 
   async saveState() {
