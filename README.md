@@ -6,13 +6,14 @@ InferMesh is a revolutionary approach to peer-to-peer networking where nodes wea
 
 ## Why InferMesh?
 
-- 🌐 True serverless architecture
-- 🧬 Self-propagating nodes
+- 🌐 True serverless P2P network
 - 🔑 Private key-based authentication
-- 📡 Decentralized state management
-- 🔄 Automatic replication
-- 💾 Persistent state
 - 🖥️ Interactive CLI
+- 📡 Decentralized state management
+- 🔄 Automatic peer discovery
+- 💾 Persistent configuration
+- 🌍 Public/Private network support
+- 🔍 Built-in peer discovery
 
 ## Quick Start
 
@@ -26,10 +27,8 @@ npm install
 
 # Start a new node
 node cli.js init
-# Save the node ID shown - you'll need it to connect!
 
-# In another terminal, connect to the node
-node cli.js connect <nodeId>
+# Dont' forget to save the node ID and port shown!
 ```
 
 ## Interactive Commands
@@ -38,105 +37,126 @@ Once connected, you'll get an interactive prompt with these commands:
 
 ```bash
 infermesh> state
-# Shows current node state and connections
+# Shows current state and data
 
-infermesh> update <state_name> <value>
-# Updates state with the given value
-# Value can be text, number, JSON object, or array
+infermesh> peers
+# Lists connected peers
 
-infermesh> create <state_name> <value>
-# Same as update, creates or updates a state value
+infermesh> discover
+# Shows all available peers in the network
 
-infermesh> delete <state_name>
+infermesh> update <key> <value>
+# Updates state. Value can be text, number, or JSON
+# Example: update name "John"
+# Example: update config {"theme":"dark","mode":1}
+
+infermesh> delete <key>
 # Deletes a state entry
+
+infermesh> connect <host> <port>
+# Connects to a peer node
+
+infermesh> info
+# Shows node information including public IP
 
 infermesh> exit
 # Exits the program
 ```
 
-### Value Types Examples
+## AWS / Public Network Usage
 
+1. Start node on AWS:
 ```bash
-# Text values
-infermesh> update name John
-Updated state: name = "John"
-
-# Number values
-infermesh> update age 25
-Updated state: age = 25
-
-# Boolean values
-infermesh> update active true
-Updated state: active = true
-
-# JSON objects
-infermesh> update config {"theme":"dark","fontSize":14}
-Updated state: config = {"theme":"dark","fontSize":14}
-
-# Arrays
-infermesh> update tags ["nodejs","p2p","mesh"]
-Updated state: tags = ["nodejs","p2p","mesh"]
-
-# Nested structures
-infermesh> update user {"name":"John","preferences":{"theme":"dark"}}
-Updated state: user = {"name":"John","preferences":{"theme":"dark"}}
+node cli.js init
+# Note the public IP and port shown
 ```
 
-### Example State Output
+2. Connect from another machine:
+```bash
+node cli.js init
+infermesh> connect <aws-public-ip> <port>
+```
 
+3. Use discovery:
+```bash
+infermesh> discover
+# Shows all available peers including AWS nodes
+```
+
+Remember to:
+- Configure AWS security group to allow inbound traffic on port range 3000-4000
+- Use the public IP address when connecting from outside AWS
+
+## State Management Examples
+
+1. Basic text state:
+```bash
+infermesh> update username "john_doe"
+infermesh> update email "john@example.com"
+```
+
+2. JSON configuration:
+```bash
+infermesh> update config {"theme":"dark","notifications":true}
+infermesh> update preferences {"language":"en","timezone":"UTC"}
+```
+
+3. Array data:
+```bash
+infermesh> update tags ["important","urgent","todo"]
+```
+
+4. Check state:
 ```bash
 infermesh> state
 {
-  "nodeId": "9f8a2d1....",
-  "port": 3025,
-  "connections": [],
-  "replicas": [3100, 3101],
   "data": {
-    "name": "John",
-    "age": 25,
-    "active": true,
+    "username": "john_doe",
+    "email": "john@example.com",
     "config": {
       "theme": "dark",
-      "fontSize": 14
+      "notifications": true
     },
-    "tags": ["nodejs", "p2p", "mesh"],
-    "user": {
-      "name": "John",
-      "preferences": {
-        "theme": "dark"
-      }
-    }
-  }
+    "tags": ["important","urgent","todo"]
+  },
+  "version": 4,
+  "timestamp": 1699825678554
 }
 ```
 
-All values are automatically synchronized across connected nodes and replicas. The system automatically detects and preserves the value type (string, number, boolean, object, or array).
+## Network Architecture
+
+- Every node is equal (no central server)
+- State is replicated across all connected nodes
+- Automatic public IP detection
+- Persistent peer connections
+- Automatic state synchronization
 
 ## Technical Details
 
-### Port Usage
-- Main nodes: 3000-3099
-- Replicas: 3100-3999
-- Automatic port selection within ranges
+### Storage
+- Configuration stored in `~/.infermesh/config.json`
+- Persistent private keys
+- Remembered peer connections
 
-### Network Architecture
-```
-Main Node (e.g., :3000)
-    │
-    ├── Replica 1 (e.g., :3100)
-    │
-    └── Replica 2 (e.g., :3101)
-```
+### Network
+- WebSocket-based communication
+- Auto-detecting public/private network
+- Port range: 3000-4000
+- Automatic peer discovery
 
-### State Synchronization
-- Real-time state sync across all replicas
-- Automatic state persistence
-- State recovery on node restart
+### State
+- Version-controlled state updates
+- Real-time state synchronization
+- JSON data support
+- Conflict resolution
 
-### Node Discovery
-- Automatic port scanning
-- Multi-replica support
-- Resilient connections
+## Security
+
+- Private key-based node identification
+- Secure state propagation
+- Connection persistence
+- AWS security group configuration required for public access
 
 ## Project Structure
 
@@ -145,87 +165,22 @@ infermesh/
 ├── src/
 │   └── state-p2p-node.js   # Core node implementation
 ├── cli.js                  # CLI interface
-└── package.json           # Project configuration
+└── package.json            # Project configuration
+└── README.md               # This file 
 ```
 
-## Example Usage
+## Development
 
-1. Start First Node:
 ```bash
-$ node cli.js init
-Node initialized successfully!
-Private Key: 3a7bd3e....
-Node ID: 9f8a2d1....
-Main service running on port: 3025
+# Clone the repository
+git clone https://github.com/infermesh/decentralized-p2p.git
 
-infermesh> state
-Current State:
-{
-  "nodeId": "9f8a2d1....",
-  "port": 3025,
-  "timestamp": 1699825678554,
-  "connections": [],
-  "replicas": [3100, 3101],
-  "data": {}
-}
+# Install dependencies
+npm install
+
+# Start a node
+node cli.js init
 ```
-
-2. Connect From Another Terminal:
-```bash
-$ node cli.js connect 9f8a2d1....
-Connected successfully!
-Local Node ID: 7e3f5d2....
-
-infermesh> create myKey Hello World
-Created state entry: myKey = Hello World
-
-infermesh> state
-Current State:
-{
-  "nodeId": "7e3f5d2....",
-  "port": 3030,
-  "timestamp": 1699825689012,
-  "connections": ["9f8a2d1...."],
-  "replicas": [3102, 3103],
-  "data": {
-    "myKey": "Hello World",
-    "lastUpdated": 1699825689012
-  }
-}
-```
-
-## Key Features Explained
-
-1. **Self-Propagation**
-   - Nodes automatically create replicas
-   - Network survives original node shutdown
-   - Automatic state synchronization
-
-2. **State Management**
-   - Real-time state updates
-   - Cross-node synchronization
-   - Persistent storage
-
-3. **Resilience**
-   - Automatic port conflict resolution
-   - Multiple replica support
-   - Connection retry logic
-
-4. **Security**
-   - Private key authentication
-   - Secure state transmission
-   - Node verification
-
-## Future Enhancements
-
-- [ ] Web interface
-- [ ] Enhanced state validation
-- [ ] Custom replication strategies
-- [ ] Advanced node discovery
-- [ ] State conflict resolution
-- [ ] Network visualization
-- [ ] Access control lists
-- [ ] End-to-end encryption
 
 ## Contributing
 
@@ -239,13 +194,12 @@ Current State:
 
 MIT License - see the [LICENSE](LICENSE) file for details
 
-## Security Notes
+## Notes
 
-- Keep your private key secure
-- Don't expose nodes directly to the internet without proper security measures
-- Consider implementing additional authentication for production use
 - This is experimental software - use at your own risk
+- Always keep your private key secure
+- For production use, implement additional security measures
 
 ## Support
 
-For issues and feature requests, please [open an issue](https://github.com/infermesh/decentralized-p2p/issues).
+For issues and feature requests, please [open an issue](https://github.com/infermesh/decentralized-p2p/issues)

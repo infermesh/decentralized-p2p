@@ -4,15 +4,8 @@
   "type": "module",
   "main": "cli.js",
   "dependencies": {
-    "@libp2p/bootstrap": "^9.0.12",
-    "@libp2p/noise": "^12.0.1",
-    "@libp2p/tcp": "^8.0.12",
-    "@libp2p/webrtc-star": "^3.0.0",
-    "@libp2p/websockets": "^7.0.12",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",
-    "kubo-rpc-client": "^3.0.1",
-    "libp2p": "^0.46.11",
     "ws": "^8.18.0"
   }
 }
