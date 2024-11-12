@@ -24,7 +24,7 @@ mkdir -p $TEMP_DIR/src
 # Download source files
 echo -e "${BLUE}Downloading source files...${NC}"
 curl -sSL "$REPO_URL/cli.js" -o "$TEMP_DIR/cli.js"
-curl -sSL "$REPO_URL/src/state-p2p-node.js" -o "$TEMP_DIR/src/state-p2p-node.js"
+curl -sSL "$REPO_URL/state-p2p-node.js" -o "$TEMP_DIR/state-p2p-node.js"
 
 # Check if installation exists
 if [ -d "$INSTALL_DIR" ]; then
