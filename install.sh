@@ -25,7 +25,6 @@ echo -e "${BLUE}Installing InferMesh...${NC}"
 # Create temporary directory for downloads
 rm -rf $TEMP_DIR
 mkdir -p $TEMP_DIR
-mkdir -p $TEMP_DIR/src
 
 # Download source files
 echo -e "${BLUE}Downloading source files...${NC}"
@@ -70,7 +69,7 @@ npm install > /dev/null 2>&1
 # Copy source files from temporary directory
 echo -e "${BLUE}Setting up files...${NC}"
 cp "$TEMP_DIR/cli.js" "$INSTALL_DIR/bin/"
-cp -r "$TEMP_DIR/src" "$INSTALL_DIR/bin/"
+cp "$TEMP_DIR/state-p2p-node.js" "$INSTALL_DIR/bin/"
 
 # Create mesh executable
 echo -e "${BLUE}Creating mesh executable...${NC}"
