@@ -56,7 +56,7 @@ class DecentralizedNode extends EventEmitter {
           timestamp: Date.now()
         }, null, 2)
       );
-      console.log('State saved to disk');
+      // console.log('State saved to disk');
     } catch (error) {
       console.error('Error saving state:', error);
     }
