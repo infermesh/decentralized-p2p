@@ -24,8 +24,6 @@ class DecentralizedNode extends EventEmitter {
     this.statePath = join(homedir(), '.infermesh', 'states');
     this.stateFile = join(this.statePath, `${this.nodeId}.json`);
     this.connectionAttempts = new Map();
-    this.nodeType = options.nodeType || 'local'; // 'local', 'ec2', or 'manual'
-    this.manualAddress = options.manualAddress; // For manually specified address
   }
 
   generateNodeId() {
@@ -356,50 +354,36 @@ class DecentralizedNode extends EventEmitter {
       const nodes = await this.discoverNodes();
 
       if (nodes.length > 0) {
-        console.log('\nFound nodes:');
+        console.log('Found nodes:');
         nodes.forEach(node => {
-          console.log(`\nNode ID: ${node.nodeId}`);
-          console.log(`Type: ${node.nodeType}`);
-          console.log(`Public Address: ${node.publicHost}:${node.port}`);
-          console.log(`Private Address: ${node.privateHost}:${node.port}`);
-          console.log(`Status: ${node.isConnected ? 'Connected' : 'Not Connected'}`);
+          console.log(`- Node ${node.nodeId} at ${node.host}:${node.port}`);
         });
       }
 
       for (const nodeInfo of nodes) {
         if (nodeInfo.isSelf || nodeInfo.isConnected) continue;
 
-        // Try both public and private addresses
-        const addresses = [
-          { host: nodeInfo.publicHost, type: 'public' },
-          { host: nodeInfo.privateHost, type: 'private' }
-        ].filter(addr => addr.host);
+        const lastAttempt = this.connectionAttempts.get(nodeInfo.nodeId);
+        const now = Date.now();
+        if (lastAttempt && (now - lastAttempt) < 300000) continue;
 
-        for (const addr of addresses) {
-          try {
-            console.log(`\nAttempting ${addr.type} address connection to node ${nodeInfo.nodeId}`);
-            console.log(`Address: ${addr.host}:${nodeInfo.port}`);
+        this.connectionAttempts.set(nodeInfo.nodeId, now);
 
-            await this.connectToNode({
-              ...nodeInfo,
-              host: addr.host
-            });
-
-            console.log(`Successfully connected to node ${nodeInfo.nodeId} via ${addr.type} address`);
-            break; // Stop trying addresses if one succeeds
-          } catch (error) {
-            console.log(`Failed connection to ${addr.type} address: ${error.message}`);
-          }
+        try {
+          console.log(`Attempting to connect to node ${nodeInfo.nodeId}`);
+          await this.connectToNode(nodeInfo);
+          console.log(`Successfully connected to node ${nodeInfo.nodeId}`);
+        } catch (error) {
+          console.log(`Failed to connect to node ${nodeInfo.nodeId}: ${error.message}`);
         }
       }
 
-      // Connection summary
       const connectedNodes = this.peers.size;
-      console.log('\nConnection Summary:');
-      console.log(`Connected Peers: ${connectedNodes}`);
-      this.peers.forEach((peer, peerId) => {
-        console.log(`- Connected to: ${peerId}`);
-      });
+      if (connectedNodes > 0) {
+        console.log(`\nConnected to ${connectedNodes} active node${connectedNodes > 1 ? 's' : ''}`);
+      } else {
+        console.log('\nNo active nodes found. This is the first node in the network.');
+      }
     } catch (error) {
       console.error('Error in network discovery:', error);
     }
@@ -412,27 +396,17 @@ class DecentralizedNode extends EventEmitter {
         return;
       }
 
-      // If we're a local node, prefer connecting to cloud nodes
-      if (!this.isCloudNode && !nodeInfo.isCloudNode) {
-        console.log('Local node skipping connection to another local node');
-        reject(new Error('Local to local connection skipped'));
-        return;
-      }
-
-      // Check if it's trying to connect to self
-      const isSelf = (
-        nodeInfo.port === this.port &&
+      // Only prevent connecting to self, allow all other connections
+      if (nodeInfo.port === this.port &&
         (nodeInfo.host === 'localhost' ||
           nodeInfo.host === '127.0.0.1' ||
-          nodeInfo.host === this.localIp ||
-          nodeInfo.host === this.publicIp)
-      );
-
-      if (isSelf) {
+          nodeInfo.host === this.publicIp ||
+          nodeInfo.host === this.privateIp)) {
         reject(new Error('Cannot connect to self'));
         return;
       }
 
+      // Check if already connected to this node
       if (this.peers.has(nodeInfo.nodeId)) {
         reject(new Error('Already connected'));
         return;
@@ -466,7 +440,6 @@ class DecentralizedNode extends EventEmitter {
           type: 'INFO',
           nodeId: this.nodeId,
           port: this.port,
-          isCloudNode: this.isCloudNode,
           state: this.state
         }));
 
